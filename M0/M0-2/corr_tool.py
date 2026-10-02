@@ -15,6 +15,38 @@
 """
 
 
+
+
+#求平均值
+def mean(target_list):
+    length=len(target_list)
+    sum_list=0
+    for i in range(length):
+        sum_list+=target_list[i]
+    return sum_list/length
+
+
+
+#计算皮尔逊相关系数
+def pearson_r(xs,ys): 
+    length=len(xs)
+    mean_x=mean(xs)  
+    mean_y=mean(ys)
+    dx = 0.0
+    dy = 0.0
+    prod = 0.0
+    for i in range(length):
+        a = xs[i] - mean_x
+        b = ys[i] - mean_y
+        dx = dx + a * a
+        dy = dy + b * b
+        prod = prod + a * b
+    r = prod / (dx*dy)
+    return r
+
+
+
+
 def main():
     raise NotImplementedError("TODO: 实现入口流程")
 
