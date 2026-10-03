@@ -26,6 +26,8 @@ import sys
 #求平均值
 def mean(target_list):
     length=len(target_list)
+    if length == 0:
+        raise ValueError("没有读到任何数据，无法计算平均值")
     sum_list=0
     for i in range(length):
         sum_list+=target_list[i]
@@ -47,6 +49,8 @@ def pearson_r(xs,ys):
         dx = dx + a * a
         dy = dy + b * b
         prod = prod + a * b
+    if dx * dy == 0:
+        raise ValueError("某一列的数值完全一样（方差为 0），相关系数没有定义")
     demon=math.sqrt(dx*dy)
     r = prod / demon
     return r
@@ -57,6 +61,8 @@ def pearson_r(xs,ys):
 def load_config(path):
     with open(path) as f:
         cfg = yaml.safe_load(f)
+    if cfg is None:
+        raise ValueError(f"配置文件是空的：{path}")
     return cfg
 
 
@@ -81,16 +87,22 @@ def main(argv=None):
     parser.add_argument("--config", required=True, help="yaml 配置文件的路径")
     args = parser.parse_args(argv)
 
-    # 2. 读配置
-    cfg = load_config(args.config)
+    # 2. 读配置 → 读数据 → 计算，整条链路包在 try 里统一处理错误
+    try:
+        cfg = load_config(args.config)
+        xs, ys = load_columns(cfg["input_csv"], cfg["columns"]["x"], cfg["columns"]["y"])
+        r = pearson_r(xs, ys)
+    except FileNotFoundError as e:
+        print(f"错误：找不到文件「{e.filename}」，请检查路径是否正确", file=sys.stderr)
+        return 1
+    except KeyError as e:
+        print(f"错误：缺少必要的字段或列名 {e}", file=sys.stderr)
+        return 1
+    except (ValueError, yaml.YAMLError) as e:
+        print(f"错误：{e}", file=sys.stderr)
+        return 1
 
-    # 3. 读数据
-    xs, ys = load_columns(cfg["input_csv"], cfg["columns"]["x"], cfg["columns"]["y"])
-
-    # 4. 计算相关系数
-    r = pearson_r(xs, ys)
-
-    # 5. 打印结果
+    # 3. 打印结果
     print("n =", len(xs))
     print("mean_x =", mean(xs))
     print("mean_y =", mean(ys))
