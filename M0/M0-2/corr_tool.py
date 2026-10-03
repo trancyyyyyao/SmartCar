@@ -15,7 +15,7 @@
 """
 
 
-
+import math
 
 #求平均值
 def mean(target_list):
@@ -41,7 +41,8 @@ def pearson_r(xs,ys):
         dx = dx + a * a
         dy = dy + b * b
         prod = prod + a * b
-    r = prod / (dx*dy)
+    demon=math.sqrt(dx*dy)
+    r = prod / demon
     return r
 
 
