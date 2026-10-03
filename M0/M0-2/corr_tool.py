@@ -18,6 +18,11 @@
 import math
 import yaml
 import csv
+import argparse
+import sys
+
+
+
 #求平均值
 def mean(target_list):
     length=len(target_list)
@@ -47,16 +52,16 @@ def pearson_r(xs,ys):
     return r
 
 
+
 #读取yaml
 def load_config(path):
     with open(path) as f:
         cfg = yaml.safe_load(f)
     return cfg
 
-def readdata(cfg):
-    csv_path = cfg["input_csv"]
-    col_x = cfg["columns"]["x"]
-    col_y = cfg["columns"]["y"]
+
+#获取指定列的数据
+def load_columns(csv_path,col_x,col_y):
     xs = []
     ys = []
     with open(csv_path) as f:
@@ -66,9 +71,33 @@ def readdata(cfg):
             ys.append(float(row[col_y]))
     return xs,ys
 
-def main():
-    raise NotImplementedError("TODO: 实现入口流程")
+
+
+def main(argv=None):
+    """程序入口：解析命令行参数，串联整个流程。"""
+
+    # 1. 解析命令行参数
+    parser = argparse.ArgumentParser(description="计算 csv 中两列数据的皮尔逊相关系数")
+    parser.add_argument("--config", required=True, help="yaml 配置文件的路径")
+    args = parser.parse_args(argv)
+
+    # 2. 读配置
+    cfg = load_config(args.config)
+
+    # 3. 读数据
+    xs, ys = load_columns(cfg["input_csv"], cfg["columns"]["x"], cfg["columns"]["y"])
+
+    # 4. 计算相关系数
+    r = pearson_r(xs, ys)
+
+    # 5. 打印结果
+    print("n =", len(xs))
+    print("mean_x =", mean(xs))
+    print("mean_y =", mean(ys))
+    print("r =", r)
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
