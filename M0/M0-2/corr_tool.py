@@ -17,6 +17,7 @@
 
 import math
 import yaml
+import csv
 #求平均值
 def mean(target_list):
     length=len(target_list)
@@ -52,6 +53,18 @@ def load_config(path):
         cfg = yaml.safe_load(f)
     return cfg
 
+def readdata(cfg):
+    csv_path = cfg["input_csv"]
+    col_x = cfg["columns"]["x"]
+    col_y = cfg["columns"]["y"]
+    xs = []
+    ys = []
+    with open(csv_path) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            xs.append(float(row[col_x]))
+            ys.append(float(row[col_y]))
+    return xs,ys
 
 def main():
     raise NotImplementedError("TODO: 实现入口流程")
