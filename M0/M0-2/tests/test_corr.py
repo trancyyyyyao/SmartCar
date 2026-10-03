@@ -1,12 +1,31 @@
-"""M0-2 单元测试（占位，待补充用例）。
 
-TODO: 先导入你的相关系数函数，再补齐下面的用例。
+import os
+import sys
 
-必须覆盖：
-- 完全正相关：[1, 2, 3] 与 [2, 4, 6] -> 1.0
-- 完全负相关：[1, 2, 3] 与 [6, 4, 2] -> -1.0
+# 把上级目录（corr_tool.py 所在的地方）加入模块搜索路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-建议补充：
-- 零方差（某一列取值恒定）应有明确的行为
-- 缺列、空文件、非数值等异常输入
-"""
+from corr_tool import pearson_r
+
+
+def test_完全正相关():
+    r = pearson_r([1, 2, 3], [2, 4, 6])
+    assert abs(r - 1.0) < 1e-9, f"期望 1.0，实际得到 {r}"
+
+
+def test_完全负相关():
+    r = pearson_r([1, 2, 3], [6, 4, 2])
+    assert abs(r + 1.0) < 1e-9, f"期望 -1.0，实际得到 {r}"
+
+
+def test_平移不变():
+    # y = x + 3，仍是完美线性关系，相关系数应为 1.0
+    r = pearson_r([1, 2, 3], [4, 5, 6])
+    assert abs(r - 1.0) < 1e-9, f"期望 1.0，实际得到 {r}"
+
+
+if __name__ == "__main__":
+    test_完全正相关()
+    test_完全负相关()
+    test_平移不变()
+    print("全部测试通过")
