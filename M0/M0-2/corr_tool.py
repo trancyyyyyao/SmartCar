@@ -20,6 +20,7 @@ import yaml
 import csv
 import argparse
 import sys
+import os
 
 
 
@@ -90,7 +91,14 @@ def main(argv=None):
     # 2. 读配置 → 读数据 → 计算，整条链路包在 try 里统一处理错误
     try:
         cfg = load_config(args.config)
-        xs, ys = load_columns(cfg["input_csv"], cfg["columns"]["x"], cfg["columns"]["y"])
+
+        # input_csv 若写的是相对路径，以「配置文件所在目录」为基准来解析，
+        # 这样无论在哪个目录下运行这个程序，都能正确定位到数据文件。
+        # （若 input_csv 本身是绝对路径，os.path.join 会直接采用它，不受影响）
+        config_dir = os.path.dirname(os.path.abspath(args.config))
+        csv_path = os.path.join(config_dir, cfg["input_csv"])
+
+        xs, ys = load_columns(csv_path, cfg["columns"]["x"], cfg["columns"]["y"])
         r = pearson_r(xs, ys)
     except FileNotFoundError as e:
         print(f"错误：找不到文件「{e.filename}」，请检查路径是否正确", file=sys.stderr)
