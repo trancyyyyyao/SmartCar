@@ -16,7 +16,7 @@
 
 
 import math
-
+import yaml
 #求平均值
 def mean(target_list):
     length=len(target_list)
@@ -46,6 +46,11 @@ def pearson_r(xs,ys):
     return r
 
 
+#读取yaml
+def load_config(path):
+    with open(path) as f:
+        cfg = yaml.safe_load(f)
+    return cfg
 
 
 def main():
