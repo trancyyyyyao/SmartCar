@@ -36,9 +36,9 @@ for v in data:
 std = math.sqrt(acc / len(data))
 
 # --- 剔除离群值 ---
-for v in data:
-    if abs(v-mean)>std*2:
-        data.remove(v)
+for t,v in zip(times,data):
+    if abs(v-mean)<std*2:
+        cleaned.append((t,v))
 
 # --- 输出清洗后的数据 ---
 output_path = OUTPUT_FILE
