@@ -1,4 +1,5 @@
 import csv
+import math
 import os
 
 INPUT_FILE = "sensor_data.csv"
@@ -31,12 +32,12 @@ mean = total / len(data)
 # --- 计算标准差 ---
 acc = 0
 for v in data:
-    acc += (v - mean)
-std = acc / len(data)
+    acc += (v - mean)*(v-mean)
+std = math.sqrt(acc / len(data))
 
 # --- 剔除离群值 ---
 for v in data:
-    if v > mean + 2 * std:
+    if abs(v-mean)>std*2:
         data.remove(v)
 
 # --- 输出清洗后的数据 ---
