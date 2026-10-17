@@ -3,7 +3,34 @@ import os
 import yaml
 import json
 import argparse
+import random
+import time
 from collections import deque
+
+
+MAX_ATTEMPTS = 3 
+
+
+# 状态 → ANSI 颜色码
+COLORS = {
+    "SUCCESS": "\033[32m",   # 绿
+    "FAILED":  "\033[31m",   # 红
+    "RETRY":   "\033[33m",   # 黄
+    "SKIPPED": "\033[34m",   # 蓝
+    "TIMEOUT": "\033[35m",   # 紫
+}
+RESET = "\033[0m"
+USE_COLOR = sys.stdout.isatty()   # 只有终端才上色；重定向到文件时自动降级
+
+
+def log(name, status, detail=""):
+    """实时打印一条任务状态；非终端环境自动去掉颜色码。"""
+    if USE_COLOR:
+        状态 = f"{COLORS.get(status, '')}{status:<8}{RESET}"
+    else:
+        状态 = f"{status:<8}"
+    print(f"  {name:16} {状态}  {detail}".rstrip())
+
 
 def load_config(path):
     """读取 yaml / json 配置文件，返回配置字典。"""
@@ -114,6 +141,98 @@ def topological_order(tasks):
         sys.exit(1)
     return order
 
+
+def run_task(tasks,order,seed=None,timeout=None):
+    rng = random.Random(seed)
+    by_name = {t["name"]: t for t in tasks}
+    results = []
+    status_by_name = {} 
+    started_at = time.time()          
+    timed_out = False                 
+    stop_index = len(order) 
+    for i,name in enumerate(order):
+        if timeout is not None and time.time() - started_at > timeout:
+            timed_out = True
+            stop_index = i
+            log("[全局]", "TIMEOUT", f"已用时 {time.time() - started_at:.2f}s，超过上限 {timeout}s")
+            break
+        t = by_name[name]
+        blocked = []
+        for d in t["dependencies"]:
+            if status_by_name.get(d) != "SUCCESS":
+                blocked.append(d)
+        if blocked:                           
+            log(name, "SKIPPED", f"(前置未成功：{'、'.join(blocked)})")
+            status_by_name[name] = "SKIPPED"
+            now = time.time()
+            results.append({
+                "name": name, "status": "SKIPPED", "attempts": 0,
+                "duration": 0.0,
+                "started_at": round(now, 3),
+                "ended_at": round(now, 3),
+            })
+            continue
+
+        # 前置检查通过，开始执行，记下开始时刻
+        task_started = time.time()
+        status = "SKIPPED"
+        for attempts in range(1, MAX_ATTEMPTS + 1):
+            time.sleep(t["duration"])
+
+            # 睡完之后再检查一次：这个任务本身有没有超时
+            if timeout is not None and time.time() - started_at > timeout:
+                timed_out = True
+                stop_index = i
+                log("[全局]", "TIMEOUT", f"已用时 {time.time() - started_at:.2f}s，超过上限 {timeout}s")
+                break
+
+            if rng.random() < t["success_rate"]:
+                status = "SUCCESS"
+                log(name, "SUCCESS", f"(第 {attempts} 次尝试)")
+                break
+            else:
+                log(name, "FAILED", f"(第 {attempts} 次尝试)")
+                if attempts < MAX_ATTEMPTS:
+                    log(name, "RETRY")
+        if timed_out:            # ← 新增：内层因超时退出，外层也停
+            break
+        if status != "SUCCESS":
+            log(name, "SKIPPED", f"(尝试 {MAX_ATTEMPTS} 次仍失败)")
+        task_ended = time.time()
+        status_by_name[name] = status
+        results.append({
+            "name": name, "status": status, "attempts": attempts,
+            "duration": round(task_ended - task_started, 3),
+            "started_at": round(task_started, 3),
+            "ended_at": round(task_ended, 3),
+        })
+    if timed_out:
+        now = time.time()
+        for name in order[stop_index:]:
+            results.append({
+                "name": name, "status": "TIMEOUT", "attempts": 0,
+                "duration": 0.0,
+                "started_at": round(now, 3),
+                "ended_at": round(now, 3),
+            })
+    total_duration = time.time() - started_at
+    return results, timed_out, total_duration
+
+
+def write_report(path, results, timed_out, total_duration):
+    """把执行结果写成 JSON 报告。"""
+    report = {
+        "timeout": timed_out,
+        "total_duration": round(total_duration, 3),
+        "tasks": results,
+    }
+    with open(path, "w", encoding="UTF-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    print(f"报告已写入 {path}")
+
+
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="按依赖顺序执行任务，模拟成功/失败，输出报告")
     parser.add_argument("--config",  required=True,           help="任务配置文件（.yaml / .yml / .json）")
@@ -125,13 +244,19 @@ def main(argv=None):
     cfg = load_config(args.config)
     tasks = validate_config(cfg)
     order = topological_order(tasks)
-    # 阶段 1 先只打印出来，确认读进来的东西是对的
-    print("配置校验通过")
-    print("  全局 timeout:", cfg.get("timeout"))
-    print("  任务数量:", len(tasks))
-    print("  执行顺序:")                       # ← 换掉原来打印全部任务的那段
-    for name in order:
-        print(f"    {name}")
+
+    # 超时：命令行 --timeout 优先，没传就用配置文件里的
+    timeout = args.timeout if args.timeout is not None else cfg.get("timeout")
+
+    print("=== 开始执行 ===")
+    results, timed_out, total = run_task(tasks, order, args.seed, timeout)
+
+    write_report(args.report, results, timed_out, total)
+
+    if timed_out:
+        print(f"=== 超时中断（总耗时 {total:.2f}s）===")
+    else:
+        print(f"=== 执行完毕（总耗时 {total:.2f}s，共 {len(results)} 个任务）===")
     return 0
 
 
