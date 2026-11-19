@@ -18,7 +18,9 @@ setup(
     license="Apache-2.0",
     entry_points={"console_scripts": [
                     "node_a_sensor = m1_ultrasonic.node_a_sensor:main",
-                    "node_b_filter = m1_ultrasonic.node_b_filter:main"
+                    "node_b_filter = m1_ultrasonic.node_b_filter:main",
+                    "node_c_alarm = m1_ultrasonic.node_c_alarm:main",
+                    "alarm_server = m1_ultrasonic.alarm_server:main",
                     ]
     },
 )
