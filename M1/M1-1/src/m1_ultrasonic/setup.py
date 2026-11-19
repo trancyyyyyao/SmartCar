@@ -18,6 +18,7 @@ setup(
     license="Apache-2.0",
     entry_points={"console_scripts": [
                     "node_a_sensor = m1_ultrasonic.node_a_sensor:main",
+                    "node_b_filter = m1_ultrasonic.node_b_filter:main"
                     ]
     },
 )
