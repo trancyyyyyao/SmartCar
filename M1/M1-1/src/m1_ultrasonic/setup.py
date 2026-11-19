@@ -16,5 +16,8 @@ setup(
     maintainer_email="student@example.com",
     description="M1-1 ultrasonic sensor, filter, and alarm nodes.",
     license="Apache-2.0",
-    entry_points={"console_scripts": []},
+    entry_points={"console_scripts": [
+                    "node_a_sensor = m1_ultrasonic.node_a_sensor:main",
+                    ]
+    },
 )
