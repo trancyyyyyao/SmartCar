@@ -1,0 +1,13 @@
+/build/
+/install/
+/log/
+
+# rosbag 数据体积较大，不提交到 Git
+/sample_bag/
+*.db3
+*.mcap
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
