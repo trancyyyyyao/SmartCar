@@ -10,6 +10,46 @@ from rclpy.executors import ExternalShutdownException
 from sensor_msgs.msg import Image,LaserScan
 from rclpy.duration import Duration
 from tf2_ros import(Buffer,TransformListener,TransformException,)
+
+import cv2
+from cv_bridge import CvBridge,CvBridgeError
+
+def draw_projection(image,pixels,ranges,range_min,range_max,point_radius,):
+    result = np.array(image, copy=True)
+    if pixels.size == 0:
+        return result
+    span = max(
+        float(range_max - range_min),
+        1e-9,
+    )
+    normalized = np.clip(
+        (ranges - range_min) / span,
+        0.0,
+        1.0,
+    )
+    near_color = np.array(
+        [255.0, 0.0, 0.0],
+        dtype=np.float64,
+    )
+    far_color = np.array(
+        [0.0, 0.0, 255.0],
+        dtype=np.float64,
+    )
+    colors = (
+        near_color[None, :] * (1.0 - normalized[:, None])
+        + far_color[None, :] * normalized[:, None]
+    ).astype(np.uint8)
+    for (u, v), color in zip(pixels, colors):
+        cv2.circle(
+            result,
+            (int(round(u)), int(round(v))),
+            point_radius,
+            tuple(int(channel) for channel in color),
+            -1,
+        )
+    return result
+
+
 def stamp_to_seconds(stamp):
     return stamp.sec+stamp.nanosec/1e9
 
@@ -164,24 +204,38 @@ class ProjectionNode(Node):
         self.declare_parameter("camera_frame", "camera_link")
         self.declare_parameter("extrinsics_file","extrinsics.yaml",)
 
+        self.declare_parameter("output_dir", ".")
+        self.declare_parameter("max_images", 3)
+        self.declare_parameter("point_radius", 2)
 
         self.sync_slop=float(self.get_parameter("sync_slop").value)
         self.queue_size=int(self.get_parameter("queue_size").value)
         self.camera_frame = str(self.get_parameter("camera_frame").value)
         extrinsics_file = str(self.get_parameter("extrinsics_file").value)
 
-       
+        output_value = str(self.get_parameter("output_dir").value)
+        self.output_dir = Path(output_value).expanduser().resolve()
+        self.max_images = int(self.get_parameter("max_images").value)
+        self.point_radius = int(self.get_parameter("point_radius").value)
+
+
         if self.sync_slop<=0.0:
             raise ValueError(f"sync_slop的值应该大于零但实际上sync_slop的值为{self.sync_slop}")
         if self.queue_size<2:
             raise ValueError(f"queue_size的值应该大于零但实际上queue_size的值为{self.queue_size}")
-
+        if self.max_images < 0:
+            raise ValueError("max_images 不能小于 0")
+        if self.point_radius <= 0:
+            raise ValueError("point_radius 必须大于 0")
+        self.output_dir.mkdir(parents=True,exist_ok=True,)
+        self.bridge = CvBridge()
         self.intrinsics = load_camera_intrinsics(extrinsics_file)
         self.pair_count=0
         self.delta_ms_values = []
         self.transform_error_count = 0
         self.total_valid_points = 0
         self.total_projected_points = 0
+        self.saved_images = 0
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(
@@ -196,6 +250,12 @@ class ProjectionNode(Node):
             slop=self.sync_slop,
         )
         self.synchronizer.registerCallback(self.on_synced)
+
+        self.debug_publisher = self.create_publisher(
+            Image,
+            "/projection/debug_image",
+            10,
+        )
         self.report_timer=self.create_timer(1.0,self.report_summary,)
         self.get_logger().info(
             f"同步节点已启动: slop={self.sync_slop:.3f}s, "
@@ -238,6 +298,20 @@ class ProjectionNode(Node):
             if projected_count == 0:
                 self.get_logger().warning(f"count={self.pair_count}: ""没有激光点落入图像范围")
                 return
+
+            try:
+                image = self.bridge.imgmsg_to_cv2(
+                    image_msg,
+                    desired_encoding="rgb8",
+                )
+            except CvBridgeError as exc:
+                self.get_logger().error(f"图像转换失败: {exc}")
+                return
+            projected_ranges = valid_ranges[valid_mask]
+            debug_image = draw_projection(image,pixels,projected_ranges,scan_msg.range_min,scan_msg.range_max,self.point_radius,)
+            output_msg = self.bridge.cv2_to_imgmsg(debug_image,encoding="rgb8",)
+            output_msg.header = image_msg.header
+            self.debug_publisher.publish(output_msg)
             u_values = pixels[:, 0]
             v_values = pixels[:, 1]
             
@@ -252,8 +326,20 @@ class ProjectionNode(Node):
                 f"{v_values.max():.3f}] "
                 f"depth=[{depths.min():.3f}, "
                 f"{depths.max():.3f}] "
-                f"image={image_msg.width}x{image_msg.height}"
             )
+            self.save_projection(debug_image)
+
+    def save_projection(self, rgb_image):
+        if self.saved_images >= self.max_images:
+            return
+        self.saved_images += 1
+        filename = f"projection_{self.saved_images:03d}.png"
+        file_path = self.output_dir / filename
+        bgr_image = cv2.cvtColor(rgb_image,cv2.COLOR_RGB2BGR,)
+        if not cv2.imwrite(str(file_path),bgr_image,):
+            self.get_logger().error(f"保存投影图失败: {file_path}")
+            return
+        self.get_logger().info(f"已保存投影图: {file_path}")
 
 
     def report_summary(self):
@@ -276,6 +362,7 @@ class ProjectionNode(Node):
                 f"transform_errors={self.transform_error_count}, "
                 f"average_points={average_points:.1f}, "
                 f"average_projected={average_projected:.1f}"
+                f"saved_images={self.saved_images}"
             )
 
 
