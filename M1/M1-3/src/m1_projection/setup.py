@@ -24,6 +24,10 @@ setup(
     description="M1-3 laser-to-camera projection workspace.",
     license="Apache-2.0",
     entry_points={
-        "console_scripts": [],
+        "console_scripts": [
+            "static_tf_node = m1_projection.static_tf_node:main",
+            "projection_node = m1_projection.projection_node:main",
+        ],
+        
     },
 )
